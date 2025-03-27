@@ -11,14 +11,17 @@ app.use(express.json());
 app.use(cors());
 
 // MongoDB Atlas Connection
-const mongoURI = process.env.MONGO_URI; // Use environment variable
+const mongoURI = process.env.MONGO_URI; // Ensure MONGO_URI is set in your .env file
 mongoose
-  .connect(mongoURI, { useNewUrlParser: true, useUnifiedTopology: true })
+  .connect(mongoURI)
   .then(() => console.log("MongoDB Atlas Connected"))
   .catch((err) => console.error("MongoDB Connection Error:", err));
 
 // Define Schemas & Models
-const EmailSchema = new mongoose.Schema({ email: { type: String, required: true, unique: true } });
+const EmailSchema = new mongoose.Schema({
+  email: { type: String, required: true, unique: true },
+});
+
 const ContactSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true },
@@ -29,6 +32,8 @@ const Email = mongoose.model("Email", EmailSchema);
 const Contact = mongoose.model("Contact", ContactSchema);
 
 // API Routes
+
+// Email Subscription API
 app.post("/api/subscribe", async (req, res) => {
   try {
     const { email } = req.body;
@@ -43,10 +48,12 @@ app.post("/api/subscribe", async (req, res) => {
   }
 });
 
+// Contact Form API
 app.post("/api/contact", async (req, res) => {
   try {
     const { name, email, message } = req.body;
-    if (!name || !email || !message) return res.status(400).json({ message: "All fields are required" });
+    if (!name || !email || !message)
+      return res.status(400).json({ message: "All fields are required" });
 
     const newContact = new Contact({ name, email, message });
     await newContact.save();

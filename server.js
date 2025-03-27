@@ -47,7 +47,7 @@ app.post("/api/subscribe", async (req, res) => {
     res.status(200).json({ message: "Subscribed successfully!" });
   } catch (error) {
     console.error("Error saving email:", error);
-    res.status(500).json({ message: "Internal Server Error" });
+    res.status(500).json({ message: "Internal Server Error", error: error.message });
   }
 });
 
@@ -63,7 +63,7 @@ app.post("/api/contact", async (req, res) => {
     res.status(200).json({ message: "Message sent successfully!" });
   } catch (error) {
     console.error("Error saving contact form data:", error);
-    res.status(500).json({ message: "Internal Server Error" });
+    res.status(500).json({ message: "Internal Server Error", error: error.message });
   }
 });
 

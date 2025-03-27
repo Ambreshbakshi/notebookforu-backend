@@ -31,7 +31,10 @@ const ContactSchema = new mongoose.Schema({
 const Email = mongoose.model("Email", EmailSchema);
 const Contact = mongoose.model("Contact", ContactSchema);
 
-// API Routes
+// Default Route for Base URL
+app.get("/", (req, res) => {
+  res.send("NotebookForU Backend is Running!");
+});
 
 // Email Subscription API
 app.post("/api/subscribe", async (req, res) => {

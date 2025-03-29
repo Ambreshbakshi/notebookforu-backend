@@ -1,36 +1,27 @@
-const express = require("express");
+// backend/routes/subscribe.js
+import express from 'express';
+import { subscribeEmail } from '../controllers/subscribe.js';
+
 const router = express.Router();
-const mongoose = require("mongoose");
 
-// Define Schema
-const SubscribeSchema = new mongoose.Schema({
-  email: { type: String, required: true, unique: true },
-  subscribedAt: { type: Date, default: Date.now },
-});
-
-const Subscriber = mongoose.model("Subscriber", SubscribeSchema);
-
-// Handle subscription requests
-router.post("/", async (req, res) => {
-  console.log("Received request body:", req.body); // Debugging log
-
+router.post('/subscribe', async (req, res) => {
   const { email } = req.body;
-  if (!email) return res.status(400).json({ error: "Email is required" });
+
+  if (!email) {
+    return res.status(400).json({ message: 'Email is required.' });
+  }
 
   try {
-    const existingSubscriber = await Subscriber.findOne({ email });
-    if (existingSubscriber) {
-      return res.status(400).json({ error: "Email already subscribed" });
-    }
-
-    const newSubscriber = new Subscriber({ email });
-    await newSubscriber.save();
-
-    res.status(201).json({ message: "Subscription successful" });
+    const result = await subscribeEmail(email);
+    res.status(200).json(result);
   } catch (error) {
-    console.error("Subscription error:", error);
-    res.status(500).json({ error: "Server error" });
+    // Custom error (from controller)
+    if (error.status) {
+      return res.status(error.status).json({ message: error.message });
+    }
+    // Generic server error
+    res.status(500).json({ message: 'Internal server error.' });
   }
 });
 
-module.exports = router;
+export default router;

@@ -1,71 +1,132 @@
-const express = require("express");
-const mongoose = require("mongoose");
-const cors = require("cors");
-require("dotenv").config();
+require('dotenv').config();
+const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 10000; // Render uses dynamic ports
 
-// Middleware
+// Enhanced CORS Configuration
+const allowedOrigins = [
+  'https://notebookforu-gye1goi5p-notebookforus-projects.vercel.app',
+  'http://localhost:3000'
+];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin && process.env.NODE_ENV === 'development') {
+      return callback(null, true);
+    }
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    const msg = `CORS policy: ${origin} not allowed`;
+    return callback(new Error(msg), false);
+  },
+  methods: ['GET', 'POST', 'OPTIONS'],
+  credentials: true
+}));
+
 app.use(express.json());
-app.use(cors());
 
-// MongoDB Atlas Connection
-const mongoURI = process.env.MONGO_URI; // Ensure MONGO_URI is set in your .env file
-mongoose
-  .connect(mongoURI)
-  .then(() => console.log("MongoDB Atlas Connected"))
-  .catch((err) => console.error("MongoDB Connection Error:", err));
+// MongoDB Connection with Retry
+const connectWithRetry = () => {
+  mongoose.connect(process.env.MONGO_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+    retryWrites: true,
+    w: 'majority'
+  })
+  .then(() => console.log('✅ MongoDB Connected'))
+  .catch(err => {
+    console.error('❌ MongoDB Connection Error:', err);
+    setTimeout(connectWithRetry, 5000);
+  });
+};
+connectWithRetry();
 
-// Define Schemas & Models
+// Email Schema
 const EmailSchema = new mongoose.Schema({
-  email: { type: String, required: true, unique: true },
+  email: {
+    type: String,
+    required: true,
+    unique: true,
+    trim: true,
+    lowercase: true,
+    validate: {
+      validator: (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v),
+      message: props => `${props.value} is not a valid email!`
+    }
+  },
+  createdAt: { type: Date, default: Date.now }
 });
 
-const ContactSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  email: { type: String, required: true },
-  message: { type: String, required: true },
-});
+const Email = mongoose.model('Email', EmailSchema);
 
-const Email = mongoose.model("Email", EmailSchema);
-const Contact = mongoose.model("Contact", ContactSchema);
-
-// Default Route for Base URL
-app.get("/", (req, res) => {
-  res.send("NotebookForU Backend is Running!");
-});
-
-// Email Subscription API
-app.post("/api/subscribe", async (req, res) => {
+// Fixed Subscription Endpoint
+app.post('/api/subscribe', async (req, res) => {
   try {
     const { email } = req.body;
-    if (!email) return res.status(400).json({ message: "Email is required" });
 
-    const newEmail = new Email({ email });
-    await newEmail.save();
-    res.status(200).json({ message: "Subscribed successfully!" });
+    // Validation
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid email is required'
+      });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    try {
+      const newEmail = new Email({ email: normalizedEmail });
+      await newEmail.save();
+      return res.status(201).json({
+        success: true,
+        message: '🎉 Subscribed successfully!'
+      });
+    } catch (saveError) {
+      // Handle duplicate key error
+      if (saveError.code === 11000) {
+        return res.status(200).json({
+          success: false,
+          message: '📭 This email is already subscribed',
+          code: 'DUPLICATE_EMAIL'
+        });
+      }
+      throw saveError;
+    }
+
   } catch (error) {
-    console.error("Error saving email:", error);
-    res.status(500).json({ message: "Internal Server Error", error: error.message });
+    console.error('🔥 Subscription Error:', error);
+    return res.status(500).json({
+      success: false,
+      message: '⚠️ Subscription service unavailable',
+      ...(process.env.NODE_ENV === 'development' && { error: error.message })
+    });
   }
 });
 
-// Contact Form API
-app.post("/api/contact", async (req, res) => {
-  try {
-    const { name, email, message } = req.body;
-    if (!name || !email || !message)
-      return res.status(400).json({ message: "All fields are required" });
-
-    const newContact = new Contact({ name, email, message });
-    await newContact.save();
-    res.status(200).json({ message: "Message sent successfully!" });
-  } catch (error) {
-    console.error("Error saving contact form data:", error);
-    res.status(500).json({ message: "Internal Server Error", error: error.message });
-  }
+// Health Check
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'healthy',
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Start Server
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+const server = app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+});
+
+// Graceful Shutdown
+process.on('SIGTERM', () => {
+  console.log('🛑 Shutting down gracefully...');
+  server.close(() => {
+    mongoose.connection.close(false, () => {
+      console.log('📦 MongoDB connection closed');
+      process.exit(0);
+    });
+  });
+});
